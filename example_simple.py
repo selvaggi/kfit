@@ -1,9 +1,10 @@
-from ROOT import TH1F, TFile,TLorentzVector, TLorentzRotation, TVector3, TProfile2D
+import ROOT
+from ROOT import TH1F, TFile,TLorentzVector, TLorentzRotation, TVector3, TProfile2D, TCanvas
 from sympy import *
 import numpy as np
 from numpy.linalg import multi_dot, inv
 import random
-import math
+from math import sqrt, sin, cos, pi
 from kinematic_fit import KinematicFit
 
 """
@@ -16,8 +17,6 @@ from kinematic_fit import KinematicFit
 """ various global definitions """
 debug = True
 debug = False
-
-pi = math.pi
 
 mh = 125.
 mz = 91.18800354003906
@@ -32,8 +31,8 @@ norm = l**2 * pi / 2 + 8 * mz**2 / s
 Eh = 0.5 * (s + mh**2 - mz**2) / sqrt_s
 Ez = sqrt_s - Eh
 
-ph_mag = math.sqrt(Eh**2 - mh**2)
-pz_mag = math.sqrt(Ez**2 - mz**2)
+ph_mag = sqrt(Eh**2 - mh**2)
+pz_mag = sqrt(Ez**2 - mz**2)
 
 # energy resolution
 sigmaOverE = 0.05
@@ -43,7 +42,7 @@ sigmaOverE = 0.05
 def sample_theta():
     while True:
         theta = random.uniform(0., pi)
-        f_theta = 1/norm * l **2 * math.sin(theta) ** 2 + 8 * mz**2 / s
+        f_theta = 1/norm * l **2 * sin(theta) ** 2 + 8 * mz**2 / s
         y = random.random()
         if y<f_theta:
             return theta
@@ -55,15 +54,15 @@ def generate_event():
     # generate Higgs kinematics in lab frame
     theta = sample_theta()
     phi = random.uniform(0., 2*pi)
-    ph_vec = ph_mag * TVector3( math.sin(theta)*math.cos(phi), math.sin(theta)*math.sin(phi), math.cos(theta))
+    ph_vec = ph_mag * TVector3( sin(theta)*cos(phi), sin(theta)*sin(phi), cos(theta))
     ph = TLorentzVector(ph_vec, Eh)
 
     # generate H-> f fbar in the Higgs rest frame
     theta_star = random.uniform(0., pi)
     phi_star = random.uniform(0., 2*pi)
-    p1_star_vec = mh/2. * TVector3( math.sin(theta_star)*math.cos(phi_star), math.sin(theta_star)*math.sin(phi_star), math.cos(theta_star))
+    p1_star_vec = mh/2. * TVector3( sin(theta_star)*cos(phi_star), sin(theta_star)*sin(phi_star), cos(theta_star))
     p2_star_vec = - p1_star_vec
-    e1_star = math.sqrt(p1_star_vec.Mag()**2 + mf**2)
+    e1_star = sqrt(p1_star_vec.Mag()**2 + mf**2)
     e2_star = e1_star
     p1_star = TLorentzVector(p1_star_vec, e1_star)
     p2_star = TLorentzVector(p2_star_vec, e2_star)
@@ -80,7 +79,7 @@ def generate_event():
 def updated_4vector(smeared_energy, p_in):
     scale = 1.
     if smeared_energy > p_in.M():
-        scale = math.sqrt(smeared_energy**2 - p_in.M()**2) / p_in.Vect().Mag()
+        scale = sqrt(smeared_energy**2 - p_in.M()**2) / p_in.Vect().Mag()
     p_reco_vec = scale * p_in.Vect()
     p_reco = TLorentzVector(p_reco_vec, smeared_energy)
     return p_reco
@@ -97,7 +96,7 @@ def fill_covmatrix(covmatrix, histo):
 def main():
 
     """ histogram definition """
-    nbins, lo, hi = 100, -1, 1
+    nbins, lo, hi = 100, -5, 5
     hpull_e1 = TH1F('hpull_e1', 'hpull_e1', nbins, lo, hi)
     hpull_e2 = TH1F('hpull_e2', 'hpull_e2', nbins, lo, hi)
 
@@ -168,16 +167,18 @@ def main():
         p1_fit = updated_4vector(e1_fit, p1_reco)
         p2_fit = updated_4vector(e2_fit, p2_reco)
 
+        sigma1_post = sqrt(Va[0][0])
+        sigma2_post = sqrt(Va[1][1])
+
         # fill histograms
 
-        hpull_e1.Fill((e1_fit - e1_reco)/e1_reco)
-        hpull_e2.Fill((e2_fit - e2_reco)/e2_reco)
+        hpull_e1.Fill((e1_fit - e1_reco)/sqrt(sigma1**2 - sigma1_post**2))
+        hpull_e2.Fill((e2_fit - e2_reco)/sqrt(sigma2**2 - sigma2_post**2))
+        #hpull_e1.Fill((e1_fit - e1_reco)/sqrt(sigma1_post**2))
+        #hpull_e2.Fill((e2_fit - e2_reco)/sqrt(sigma2_post**2))
 
         hmass_before.Fill( (p1_reco + p2_reco).M() )
         hmass_after.Fill( (p1_fit + p2_fit).M() )
-
-        fill_covmatrix(Va0, hcov_before)
-        fill_covmatrix(Va, hcov_after)
 
         Va0_norm = np.array([[sigma1**2 / e1_gen**2, 1.e-6],
                              [1.e-6, sigma2**2 / e2_gen**2]])
@@ -190,7 +191,6 @@ def main():
         fill_covmatrix(Va, hcov_after)
         fill_covmatrix(Va_norm, hcovnorm_after)
 
-
     out_root = TFile("output.root","RECREATE")
     hpull_e1.Write()
     hpull_e2.Write()
@@ -200,6 +200,39 @@ def main():
     hcovnorm_before.Write()
     hcov_after.Write()
     hcovnorm_after.Write()
+
+    # Show resulting histograms
+    cnv1 = TCanvas("pulls", "pulls", 50, 50, 800, 400)
+    cnv1.Divide(2, 1)
+    cnv1.cd(1)
+    #ROOT.gStyle.SetOptStat(0)
+    hpull_e1.Draw()
+    cnv1.cd(2)
+    #ROOT.gStyle.SetOptStat(0)
+    hpull_e2.Draw()
+    cnv1.Print("example_simple_pulls.png", "png")
+
+    cnv2 = TCanvas("covariance matrix", "covariance matrix", 50, 50, 800, 400)
+    cnv2.Divide(2, 1)
+    cnv2.cd(1)
+    #ROOT.gStyle.SetOptStat(0)
+    hcovnorm_before.Draw("TEXT")
+    cnv2.cd(2)
+    #ROOT.gStyle.SetOptStat(0)
+    hcovnorm_after.Draw("TEXT")
+    cnv2.Print("example_simple_cov.png", "png")
+
+
+    cnv3 = TCanvas("invariant mass", "invariant mass", 50, 50, 400, 400)
+    ROOT.gStyle.SetOptStat(0)
+    hmass_after.SetLineWidth(2)
+    hmass_after.SetLineColor(ROOT.kRed)
+    hmass_after.Draw()
+    hmass_before.SetLineWidth(2)
+    hmass_before.Draw("same")
+    cnv3.Print("example_simple_mass.png", "png")
+
+    input()
 
 #_______________________________________________________________________________
 if __name__ == "__main__":
