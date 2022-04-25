@@ -131,7 +131,7 @@ def main():
     options = (maxloops, maxDeltaChiSq, weight)
 
     ## event loop here
-    for iev in range(1000):
+    for iev in range(100):
 
         ## simulate Higgs decay kinematics
         p1_gen, p2_gen = generate_event()
@@ -174,11 +174,11 @@ def main():
 
         hpull_e1.Fill((e1_fit - e1_reco)/sqrt(sigma1**2 - sigma1_post**2))
         hpull_e2.Fill((e2_fit - e2_reco)/sqrt(sigma2**2 - sigma2_post**2))
-        #hpull_e1.Fill((e1_fit - e1_reco)/sqrt(sigma1_post**2))
-        #hpull_e2.Fill((e2_fit - e2_reco)/sqrt(sigma2_post**2))
 
         hmass_before.Fill( (p1_reco + p2_reco).M() )
         hmass_after.Fill( (p1_fit + p2_fit).M() )
+
+        #print(e1_reco + e2_reco, e1_fit + e2_fit, e1_gen + e2_gen)
 
         Va0_norm = np.array([[sigma1**2 / e1_gen**2, 1.e-6],
                              [1.e-6, sigma2**2 / e2_gen**2]])
